@@ -1,6 +1,8 @@
 package simulations;
 
 import ch.qos.logback.classic.Level;
+import simulations.Shared.Config;
+
 import org.cloudsimplus.allocationpolicies.migration.VmAllocationPolicyMigrationBestFitStaticThreshold;
 import org.cloudsimplus.allocationpolicies.migration.VmAllocationPolicyMigrationStaticThreshold;
 import org.cloudsimplus.brokers.DatacenterBroker;
@@ -40,37 +42,6 @@ import java.io.IOException;
 import java.io.PrintStream;
 
 public final class MigrationBestFitPolicy {
-  private static final int SCHEDULING_INTERVAL = 1;
-
-  private static final class Config {
-    private static final class Host {
-      private static final double UNDER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION = 0.1;
-      private static final double OVER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION = 0.7;
-      private static final int SEARCH_RETRY_DELAY = 60;
-      private static final long BW = 16_000L; // Mb/s
-      private static final int MIPS = 1000; // for each PE
-      private static final long RAM[] = { 15_000, 500_000, 25_000, 15_000, 500_000, 25_000, 15_000, 500_000, 25_000, 15_000, 500_000, 25_000 }; // host memory (MB)
-      private static final long STORAGE = 1_000_000; // host storage
-      private static final int PES[] = { 4, 5, 5, 4, 5, 5, 4, 5, 5, 4, 5, 5 };
-    }
-
-    private static final class VM {
-      private static final int PES[] = { 2, 2, 2, 1, 2, 2, 2, 1, 2, 2, 2, 1, 2, 2, 2, 1 };
-      private static final int MIPS = 1000; // for each PE
-      private static final long SIZE = 1000; // image size (MB)
-      private static final int RAM = 10_000; // VM memory (MB)
-      private static final double BW = Config.Host.BW / (double) PES.length;
-    }
-
-    private static final class Cloudlet {
-      private static final long LENGTH = 20_000;
-      private static final long FILESIZE = 300;
-      private static final long OUTPUTSIZE = 300;
-      private static final double INITIAL_CPU_PERCENTAGE = 0.8;
-      private static final double CPU_INCREMENT_PER_SECOND = 0.04;
-    }
-  }
-
   private final List<Vm> vmList = new ArrayList<>();
   private final DatacenterBrokerSimple broker;
 
@@ -110,7 +81,7 @@ public final class MigrationBestFitPolicy {
 
     try {
       CsvTable csv = new CsvTable();
-      csv.setPrintStream(new PrintStream(new java.io.File("results/migration_best_fit_policy.csv")));
+      csv.setPrintStream(new PrintStream(new java.io.File("results/migration_cpu_utilization.csv")));
       new CloudletsTableBuilder(finishedList, csv).build();
     } catch (IOException e) {
       System.err.println(e.getMessage());
@@ -274,7 +245,7 @@ public final class MigrationBestFitPolicy {
           host, host.getMips(), host.getPesNumber(), host.getTotalMipsCapacity());
     }
 
-    dc.setSchedulingInterval(SCHEDULING_INTERVAL)
+    dc.setSchedulingInterval(Config.Scheduling.INTERVAL)
         .setHostSearchRetryDelay(Config.Host.SEARCH_RETRY_DELAY);
 
     return dc;
