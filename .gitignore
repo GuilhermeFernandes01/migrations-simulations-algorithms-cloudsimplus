@@ -1,4 +1,8 @@
 target
 
-results/*
-!results/.gitkeep
+migrations_results/*
+!migrations_results/.gitkeep
+
+analysis/venv
+analysis/plots
+analysis/migrations_results

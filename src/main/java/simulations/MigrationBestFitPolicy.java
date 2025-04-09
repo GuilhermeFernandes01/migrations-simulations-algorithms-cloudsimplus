@@ -33,6 +33,8 @@ import org.cloudsimplus.listeners.VmHostEventInfo;
 import org.cloudsimplus.util.Log;
 import org.cloudsimplus.power.models.PowerModelHost;
 import org.cloudsimplus.power.models.PowerModelHostSimple;
+import org.cloudsimplus.vms.HostResourceStats;
+import org.cloudsimplus.vms.VmResourceStats;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -83,12 +85,11 @@ public final class MigrationBestFitPolicy {
 
     try {
       CsvTable csv = new CsvTable();
-      csv.setPrintStream(new PrintStream(new java.io.File("results/migration_best_fit_policy.csv")));
+      csv.setPrintStream(new PrintStream(new java.io.File("migrations_results/migration_best_fit_policy.csv")));
       new CloudletsTableBuilder(finishedList, csv).build();
 
-      // Create a CSV file for power consumption data
       CsvTable powerCsv = new CsvTable();
-      powerCsv.setPrintStream(new PrintStream(new java.io.File("results/migration_best_fit_power.csv")));
+      powerCsv.setPrintStream(new PrintStream(new java.io.File("migrations_results/migration_best_fit_power.csv")));
       exportPowerConsumptionToCsv(powerCsv);
     } catch (IOException e) {
       System.err.println(e.getMessage());
@@ -100,8 +101,11 @@ public final class MigrationBestFitPolicy {
     hostList.stream().filter(h -> h.getId() <= 2).forEach(this::printHostStateHistory);
     System.out.printf("Number of VM migrations: %d%n", migrationsNumber);
 
-    // Print power consumption summary
     printPowerConsumptionSummary();
+
+    System.out.println("\n---------- VMs POWER CONSUMPTION ----------");
+    printVmsCpuUtilizationAndPowerConsumption();
+    System.out.println("-------------------------------------------");
 
     System.out.println(getClass().getSimpleName() + " finished!");
   }
@@ -114,10 +118,7 @@ public final class MigrationBestFitPolicy {
         info.getTime(), vm, targetHost);
     showVmAllocatedMips(vm, targetHost, info.getTime());
 
-    // VM current host (source)
     showHostAllocatedMips(info.getTime(), vm.getHost());
-
-    // Migration host (target)
     showHostAllocatedMips(info.getTime(), targetHost);
     System.out.println();
 
@@ -173,8 +174,6 @@ public final class MigrationBestFitPolicy {
       list.add(cloudlet);
     }
 
-    // Changes the CPU usage of the last cloudlet to start at a lower value and
-    // increase dynamically up to 100%
     cloudlet.setUtilizationModelCpu(createCpuUtilizationModel(0.2, 1));
 
     broker.submitCloudletList(list);
@@ -205,6 +204,7 @@ public final class MigrationBestFitPolicy {
 
     list.forEach(vm -> vm.addOnMigrationStartListener(this::startMigration));
     list.forEach(vm -> vm.addOnMigrationFinishListener(this::finishMigration));
+    list.forEach(vm -> vm.enableUtilizationStats());
   }
 
   public Vm createVm(final int pes) {
@@ -280,8 +280,17 @@ public final class MigrationBestFitPolicy {
     host.setVmScheduler(new VmSchedulerTimeShared());
     host.enableUtilizationStats();
 
-    // Add power model to the host
-    final PowerModelHost powerModel = new PowerModelHostSimple(Config.Power.MAX_POWER, Config.Power.STATIC_POWER);
+    PowerModelHost powerModel;
+    if (pesNumber <= 16) {
+      powerModel = new PowerModelHostSimple(Config.Power.SMALL_MAX_POWER, Config.Power.SMALL_STATIC_POWER);
+    } else if (pesNumber <= 32) {
+      powerModel = new PowerModelHostSimple(Config.Power.MEDIUM_MAX_POWER, Config.Power.MEDIUM_STATIC_POWER);
+    } else if (pesNumber <= 64) {
+      powerModel = new PowerModelHostSimple(Config.Power.LARGE_MAX_POWER, Config.Power.LARGE_STATIC_POWER);
+    } else {
+      powerModel = new PowerModelHostSimple(Config.Power.XLARGE_MAX_POWER, Config.Power.XLARGE_STATIC_POWER);
+    }
+
     host.setPowerModel(powerModel);
 
     return host;
@@ -308,53 +317,100 @@ public final class MigrationBestFitPolicy {
     System.out.println();
   }
 
-  /**
-   * Exports power consumption data to a CSV file.
-   * @param csv the CSV table to write data to
-   */
   private void exportPowerConsumptionToCsv(CsvTable csv) {
     csv.setTitle("Power Consumption Data - Best Fit Migration Policy");
 
-    // Create and write CSV content manually
     PrintStream out = csv.getPrintStream();
     out.println("Host,CPUUtilization,PowerConsumption(W),TotalEnergyConsumption(Wh)");
 
-    // Add data for each host
-    for (Host host : hostList) {
-        final double utilizationPercent = host.getCpuUtilizationStats().getMean();
-        final double power = host.getPowerModel().getPower(utilizationPercent);
-        final double energyWattHour = power * (simulation.clock() / 3600.0); // Convert to Watt-hour
+    double totalPower = 0;
+    double totalEnergy = 0;
 
-        out.printf("%d,%.2f,%.2f,%.2f%n",
-            host.getId(),
-            utilizationPercent * 100,
-            power,
-            energyWattHour);
+    for (Host host : hostList) {
+      final HostResourceStats cpuStats = host.getCpuUtilizationStats();
+      final double utilizationPercentMean = cpuStats.getMean();
+      final double watts = host.getPowerModel().getPower(utilizationPercentMean);
+      final double energyWattHour = watts * (simulation.clock() / 3600.0); // Convert to Watt-hour
+
+      out.printf("%d,%.2f,%.2f,%.2f%n",
+          host.getId(),
+          utilizationPercentMean * 100,
+          watts,
+          energyWattHour);
+
+      totalPower += watts;
+      totalEnergy += energyWattHour;
     }
+
+    out.printf("Total,,%.2f,%.2f%n", totalPower, totalEnergy);
   }
 
-  /**
-   * Prints a summary of the power consumption for all hosts.
-   */
   private void printPowerConsumptionSummary() {
     System.out.println("\n---------- POWER CONSUMPTION SUMMARY ----------");
     double totalPower = 0;
     double totalEnergy = 0;
 
     for (Host host : hostList) {
-        final double utilizationPercent = host.getCpuUtilizationStats().getMean();
-        final double power = host.getPowerModel().getPower(utilizationPercent);
-        final double energyWattHour = power * (simulation.clock() / 3600.0); // Convert to Watt-hour
+      final HostResourceStats cpuStats = host.getCpuUtilizationStats();
+      final double utilizationPercentMean = cpuStats.getMean();
+      final double watts = host.getPowerModel().getPower(utilizationPercentMean);
+      final double energyWattHour = watts * (simulation.clock() / 3600.0); // Convert to Watt-hour
 
-        System.out.printf("Host %d - CPU Utilization: %.2f%% - Power: %.2f W - Energy: %.2f Wh\n",
-            host.getId(), utilizationPercent * 100, power, energyWattHour);
+      System.out.printf("Host %d - CPU Utilization: %.2f%% - Power: %.2f W - Energy: %.2f Wh\n",
+          host.getId(), utilizationPercentMean * 100, watts, energyWattHour);
 
-        totalPower += power;
-        totalEnergy += energyWattHour;
+      totalPower += watts;
+      totalEnergy += energyWattHour;
     }
 
     System.out.printf("\nTotal Datacenter Power: %.2f W\n", totalPower);
     System.out.printf("Total Energy Consumption: %.2f Wh\n", totalEnergy);
     System.out.println("------------------------------------------------");
+  }
+
+  private void printVmsCpuUtilizationAndPowerConsumption() {
+    System.out.println("Collecting VM utilization statistics...");
+
+    vmList.sort(comparingLong(vm -> vm.getHost().getId()));
+    for (Vm vm : vmList) {
+      if (vm.getHost() == Host.NULL || !vm.isCreated()) {
+        System.out.printf("Vm %3d: Not allocated to any host%n", vm.getId());
+        continue;
+      }
+
+      final VmResourceStats cpuStats = vm.getCpuUtilizationStats();
+      if (cpuStats == null) {
+        System.out.printf("Vm %3d: CPU statistics unavailable%n", vm.getId());
+        continue;
+      }
+
+      final double cpuMean = cpuStats.getMean();
+      if (Double.isNaN(cpuMean) || vm.getHost().getVmCreatedList().isEmpty()) {
+        System.out.printf("Vm %3d: CPU usage mean unavailable (%.4f)%n", vm.getId(), cpuMean);
+        continue;
+      }
+
+      try {
+        final var powerModel = vm.getHost().getPowerModel();
+        if (powerModel == null) {
+          System.out.printf("Vm %3d: Power model unavailable for host %d%n", vm.getId(), vm.getHost().getId());
+          continue;
+        }
+
+        final double hostStaticPower = powerModel instanceof PowerModelHostSimple powerModelHost
+            ? powerModelHost.getStaticPower()
+            : 0;
+        final double hostStaticPowerByVm = hostStaticPower / Math.max(1, vm.getHost().getVmCreatedList().size());
+
+        final double vmRelativeCpuUtilization = cpuMean / Math.max(1, vm.getHost().getVmCreatedList().size());
+        final double vmPower = powerModel.getPower(vmRelativeCpuUtilization) - hostStaticPower + hostStaticPowerByVm; // Watts
+
+        System.out.printf(
+            "Vm %3d CPU Usage Mean: %6.1f%% | Power Consumption Mean: %8.0f W%n",
+            vm.getId(), cpuMean * 100, vmPower);
+      } catch (Exception e) {
+        System.out.printf("Vm %3d: Error calculating power consumption: %s%n", vm.getId(), e.getMessage());
+      }
+    }
   }
 }
