@@ -31,6 +31,8 @@ import org.cloudsimplus.builders.tables.HostHistoryTableBuilder;
 import org.cloudsimplus.listeners.DatacenterBrokerEventInfo;
 import org.cloudsimplus.listeners.VmHostEventInfo;
 import org.cloudsimplus.util.Log;
+import org.cloudsimplus.power.models.PowerModelHost;
+import org.cloudsimplus.power.models.PowerModelHostSimple;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -81,8 +83,13 @@ public final class MigrationBestFitPolicy {
 
     try {
       CsvTable csv = new CsvTable();
-      csv.setPrintStream(new PrintStream(new java.io.File("results/migration_cpu_utilization.csv")));
+      csv.setPrintStream(new PrintStream(new java.io.File("results/migration_best_fit_policy.csv")));
       new CloudletsTableBuilder(finishedList, csv).build();
+
+      // Create a CSV file for power consumption data
+      CsvTable powerCsv = new CsvTable();
+      powerCsv.setPrintStream(new PrintStream(new java.io.File("results/migration_best_fit_power.csv")));
+      exportPowerConsumptionToCsv(powerCsv);
     } catch (IOException e) {
       System.err.println(e.getMessage());
     }
@@ -92,6 +99,10 @@ public final class MigrationBestFitPolicy {
 
     hostList.stream().filter(h -> h.getId() <= 2).forEach(this::printHostStateHistory);
     System.out.printf("Number of VM migrations: %d%n", migrationsNumber);
+
+    // Print power consumption summary
+    printPowerConsumptionSummary();
+
     System.out.println(getClass().getSimpleName() + " finished!");
   }
 
@@ -267,7 +278,11 @@ public final class MigrationBestFitPolicy {
     final List<Pe> peList = createPeList(pesNumber);
     final Host host = new HostSimple(ram, Config.Host.BW, Config.Host.STORAGE, peList);
     host.setVmScheduler(new VmSchedulerTimeShared());
-    host.setStateHistoryEnabled(true);
+    host.enableUtilizationStats();
+
+    // Add power model to the host
+    final PowerModelHost powerModel = new PowerModelHostSimple(Config.Power.MAX_POWER, Config.Power.STATIC_POWER);
+    host.setPowerModel(powerModel);
 
     return host;
   }
@@ -291,5 +306,55 @@ public final class MigrationBestFitPolicy {
     System.out.println();
     hostList.forEach(host -> showHostAllocatedMips(info.getTime(), host));
     System.out.println();
+  }
+
+  /**
+   * Exports power consumption data to a CSV file.
+   * @param csv the CSV table to write data to
+   */
+  private void exportPowerConsumptionToCsv(CsvTable csv) {
+    csv.setTitle("Power Consumption Data - Best Fit Migration Policy");
+
+    // Create and write CSV content manually
+    PrintStream out = csv.getPrintStream();
+    out.println("Host,CPUUtilization,PowerConsumption(W),TotalEnergyConsumption(Wh)");
+
+    // Add data for each host
+    for (Host host : hostList) {
+        final double utilizationPercent = host.getCpuUtilizationStats().getMean();
+        final double power = host.getPowerModel().getPower(utilizationPercent);
+        final double energyWattHour = power * (simulation.clock() / 3600.0); // Convert to Watt-hour
+
+        out.printf("%d,%.2f,%.2f,%.2f%n",
+            host.getId(),
+            utilizationPercent * 100,
+            power,
+            energyWattHour);
+    }
+  }
+
+  /**
+   * Prints a summary of the power consumption for all hosts.
+   */
+  private void printPowerConsumptionSummary() {
+    System.out.println("\n---------- POWER CONSUMPTION SUMMARY ----------");
+    double totalPower = 0;
+    double totalEnergy = 0;
+
+    for (Host host : hostList) {
+        final double utilizationPercent = host.getCpuUtilizationStats().getMean();
+        final double power = host.getPowerModel().getPower(utilizationPercent);
+        final double energyWattHour = power * (simulation.clock() / 3600.0); // Convert to Watt-hour
+
+        System.out.printf("Host %d - CPU Utilization: %.2f%% - Power: %.2f W - Energy: %.2f Wh\n",
+            host.getId(), utilizationPercent * 100, power, energyWattHour);
+
+        totalPower += power;
+        totalEnergy += energyWattHour;
+    }
+
+    System.out.printf("\nTotal Datacenter Power: %.2f W\n", totalPower);
+    System.out.printf("Total Energy Consumption: %.2f Wh\n", totalEnergy);
+    System.out.println("------------------------------------------------");
   }
 }

@@ -102,5 +102,10 @@ public class Shared {
       public static final double INITIAL_CPU_PERCENTAGE = 0.8;
       public static final double CPU_INCREMENT_PER_SECOND = 0.04;
     }
+
+    public static final class Power {
+      public static final double STATIC_POWER = 35;
+      public static final int MAX_POWER = 50;
+    }
   }
 }
