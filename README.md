@@ -79,6 +79,8 @@ These files contain detailed data for each migration run.
 
 ## Analysis
 
+The analysis scripts and related files are located in the `analysis` folder.
+
 ### Prerequisites
 
 - [Python 3.6+](https://www.python.org/downloads/)
