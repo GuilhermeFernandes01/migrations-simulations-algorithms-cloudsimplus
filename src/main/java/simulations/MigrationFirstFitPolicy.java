@@ -3,7 +3,7 @@ package simulations;
 import ch.qos.logback.classic.Level;
 import simulations.Shared.Config;
 
-import org.cloudsimplus.allocationpolicies.migration.VmAllocationPolicyMigrationBestFitStaticThreshold;
+import org.cloudsimplus.allocationpolicies.migration.VmAllocationPolicyMigrationFirstFitStaticThreshold;
 import org.cloudsimplus.allocationpolicies.migration.VmAllocationPolicyMigrationStaticThreshold;
 import org.cloudsimplus.brokers.DatacenterBroker;
 import org.cloudsimplus.brokers.DatacenterBrokerSimple;
@@ -30,7 +30,7 @@ import static java.util.Comparator.comparingLong;
 import java.io.IOException;
 import java.io.PrintStream;
 
-public final class MigrationBestFitPolicy {
+public final class MigrationFirstFitPolicy {
   private final List<Vm> vmList = new ArrayList<>();
   private final DatacenterBrokerSimple broker;
 
@@ -40,10 +40,10 @@ public final class MigrationBestFitPolicy {
   private final int[] migrationsNumber = {0};
 
   public static void main(String[] args) {
-    new MigrationBestFitPolicy();
+    new MigrationFirstFitPolicy();
   }
 
-  private MigrationBestFitPolicy() {
+  private MigrationFirstFitPolicy() {
     Log.setLevel(Level.INFO);
 
     if (Config.Host.PES.length != Config.Host.RAM.length) {
@@ -64,29 +64,29 @@ public final class MigrationBestFitPolicy {
     simulation.start();
 
     final List<Cloudlet> finishedList = broker.getCloudletFinishedList();
-    final Comparator<Cloudlet> cloudletComparator =
-        comparingLong((Cloudlet c) -> c.getVm().getHost().getId())
-            .thenComparingLong(c -> c.getVm().getId())
-            .thenComparingLong(Cloudlet::getId);
+    final Comparator<Cloudlet> cloudletComparator = comparingLong((Cloudlet c) -> c.getVm().getHost().getId())
+        .thenComparingLong(c -> c.getVm().getId())
+        .thenComparingLong(Cloudlet::getId);
     finishedList.sort(cloudletComparator);
 
     try {
-        java.io.File resultsDir = new java.io.File("migrations_results");
-        if (!resultsDir.exists()) {
-          resultsDir.mkdirs();
-        }
+      java.io.File resultsDir = new java.io.File("migrations_results");
+      if (!resultsDir.exists()) {
+        resultsDir.mkdirs();
+      }
 
-        CsvTable csv = new CsvTable();
-        csv.setPrintStream(new PrintStream(new java.io.File("migrations_results/migration_best_fit_policy.csv")));
-        new CloudletsTableBuilder(finishedList, csv).build();
+      CsvTable csv = new CsvTable();
+      csv.setPrintStream(new PrintStream(new java.io.File("migrations_results/migration_first_fit_policy.csv")));
+      new CloudletsTableBuilder(finishedList, csv).build();
 
-        CsvTable powerCsv = new CsvTable();
-        powerCsv.setPrintStream(new PrintStream(new java.io.File("migrations_results/migration_best_fit_power.csv")));
-        Shared.exportPowerConsumptionToCsv(hostList, simulation, powerCsv, "Best Fit");
+      CsvTable powerCsv = new CsvTable();
+      powerCsv.setPrintStream(new PrintStream(new java.io.File("migrations_results/migration_first_fit_power.csv")));
+      Shared.exportPowerConsumptionToCsv(hostList, simulation, powerCsv, "First Fit");
 
-        new CloudletsTableBuilder(finishedList).build();
+      // Print summary to console for verification
+      new CloudletsTableBuilder(finishedList).build();
     } catch (IOException e) {
-        System.err.println("Error writing CSV files: " + e.getMessage());
+      System.err.println("Error writing CSV files: " + e.getMessage());
     }
 
     System.out.printf(
@@ -143,7 +143,7 @@ public final class MigrationBestFitPolicy {
     this.hostList = createHosts();
     System.out.println();
 
-    this.allocationPolicy = new VmAllocationPolicyMigrationBestFitStaticThreshold(
+    this.allocationPolicy = new VmAllocationPolicyMigrationFirstFitStaticThreshold(
         new VmSelectionPolicyMinimumUtilization(),
         Config.Host.OVER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION);
     this.allocationPolicy.setUnderUtilizationThreshold(Config.Host.UNDER_UTILIZATION_THRESHOLD_FOR_VM_MIGRATION);

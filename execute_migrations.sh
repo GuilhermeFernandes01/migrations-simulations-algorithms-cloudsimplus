@@ -5,4 +5,4 @@ mvn -B compile dependency:copy-dependencies
 
 # Run each simulation
 java -cp "target/classes:target/dependency/*" simulations.MigrationBestFitPolicy
-java -cp "target/classes:target/dependency/*" simulations.MigrationWorstFitPolicy
+java -cp "target/classes:target/dependency/*" simulations.MigrationFirstFitPolicy

@@ -28,14 +28,6 @@ pip install --upgrade pip
 pip install --upgrade setuptools wheel
 pip install --upgrade -r requirements.txt
 
-if [ ! -f "plots/README.txt" ]; then
-    echo "Migration Strategies Power Analysis Plots" > plots/README.txt
-    echo "-----------------------------------------" >> plots/README.txt
-    echo "" >> plots/README.txt
-    echo "total_energy_comparison.png - Compares total energy consumption (Wh) across all strategies" >> plots/README.txt
-    echo "strategy_comparison.csv - CSV file with summary metrics for all strategies" >> plots/README.txt
-fi
-
 print_message "Setup complete! To run the analysis:"
 print_message "1. Activate the virtual environment: source venv/bin/activate"
 print_message "2. Run the analysis script: python3 analyze_migration.py"

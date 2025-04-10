@@ -1,5 +1,4 @@
 import os
-import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -19,7 +18,16 @@ def load_data(migration_results_dir='../migrations_results'):
             df = pd.read_csv(file_path)
             data_files[strategy_name] = df
         elif 'policy' in strategy_name:
-            df = pd.read_csv(file_path, skiprows=1)  # Skip header row for policy files
+            # For policy files, we need to skip the first row and fix column names
+            # First read the header to get column names
+            with open(file_path, 'r') as f:
+                header_line = f.readline().strip()
+
+            # Clean up column names - they have a specific format with commas and spaces
+            column_names = [col.strip() for col in header_line.split(',')]
+
+            # Now read the data, skipping the first row (column names) and the second row (units)
+            df = pd.read_csv(file_path, skiprows=2, names=column_names)
             data_files[strategy_name] = df
 
     return data_files
@@ -80,7 +88,9 @@ def plot_power_comparison(power_data):
     plt.tight_layout()
     plt.savefig('plots/total_energy_comparison.png')
 
-    print(f"Plots saved to the 'plots' directory")
+    print(f"Total energy comparison plot saved to the 'plots' directory")
+
+    return results
 
 def analyze_migration_policies(policy_data):
     """Analyze migration policy data"""
@@ -133,6 +143,144 @@ def plot_vm_distribution(policy_data):
 
     print(f"VM distribution plots saved to the 'plots' directory")
 
+def analyze_execution_times(policy_data):
+    """Analyze execution times of cloudlets across different strategies"""
+    results = {}
+
+    for strategy, df in policy_data.items():
+        if 'policy' in strategy:
+            strategy_name = strategy.replace('_policy', '')
+
+            # Check if we have the execution time column
+            # It might be named 'ExecTime' or have spaces like 'Exec Time'
+            exec_time_col = None
+            for col in df.columns:
+                if 'Exec' in col and 'Time' in col:
+                    exec_time_col = col
+                    break
+
+            if exec_time_col is None:
+                print(f"Warning: No execution time column found in {strategy}")
+                continue
+
+            # Convert to numeric, handling any non-numeric values
+            df[exec_time_col] = pd.to_numeric(df[exec_time_col], errors='coerce')
+
+            # Calculate execution time statistics
+            min_time = df[exec_time_col].min()
+            max_time = df[exec_time_col].max()
+            avg_time = df[exec_time_col].mean()
+            total_time = df[exec_time_col].sum()
+
+            results[strategy_name] = {
+                'min_execution_time': min_time,
+                'max_execution_time': max_time,
+                'avg_execution_time': avg_time,
+                'total_execution_time': total_time,
+                'cloudlet_count': len(df)
+            }
+
+    return results
+
+def plot_execution_time_comparison(policy_data):
+    """Create comparative plot for maximum execution time across strategies"""
+    policy_dfs = {k: v for k, v in policy_data.items() if 'policy' in k}
+
+    if not policy_dfs:
+        print("No policy data found to plot execution time comparison")
+        return
+
+    os.makedirs('plots', exist_ok=True)
+
+    # Get execution time statistics
+    exec_time_stats = analyze_execution_times(policy_data)
+
+    # Convert to DataFrame for easier plotting
+    stats_df = pd.DataFrame(exec_time_stats).T
+
+    # Create bar chart for max execution time
+    plt.figure(figsize=(10, 6))
+    strategies = list(stats_df.index)
+    max_times = [stats_df.loc[s, 'max_execution_time'] for s in strategies]
+
+    plt.bar(strategies, max_times)
+    plt.title('Maximum Execution Time by Migration Strategy')
+    plt.xlabel('Migration Strategy')
+    plt.ylabel('Maximum Execution Time (seconds)')
+    plt.tight_layout()
+    plt.savefig('plots/max_execution_time_comparison.png')
+
+    print(f"Maximum execution time comparison plot saved to the 'plots' directory")
+
+    return exec_time_stats
+
+def plot_total_execution_time_comparison(policy_data):
+    """Create comparative plot for total execution time across strategies"""
+    policy_dfs = {k: v for k, v in policy_data.items() if 'policy' in k}
+
+    if not policy_dfs:
+        print("No policy data found to plot total execution time comparison")
+        return
+
+    os.makedirs('plots', exist_ok=True)
+
+    # Get execution time statistics
+    exec_time_stats = analyze_execution_times(policy_data)
+
+    # Convert to DataFrame for easier plotting
+    stats_df = pd.DataFrame(exec_time_stats).T
+
+    # Create bar chart for total execution time
+    plt.figure(figsize=(10, 6))
+    strategies = list(stats_df.index)
+    total_times = [stats_df.loc[s, 'total_execution_time'] for s in strategies]
+
+    plt.bar(strategies, total_times)
+    plt.title('Total Execution Time by Migration Strategy')
+    plt.xlabel('Migration Strategy')
+    plt.ylabel('Total Execution Time (seconds)')
+    plt.tight_layout()
+    plt.savefig('plots/total_execution_time_comparison.png')
+
+    print(f"Total execution time comparison plot saved to the 'plots' directory")
+
+    return exec_time_stats
+
+def generate_comparison_table(power_results, exec_time_results=None):
+    """Generate a comparison table for all strategies"""
+    comparison_data = []
+
+    for strategy, results in power_results.items():
+        strategy_name = strategy.replace('_power', '')
+
+        # Start with power results
+        strategy_data = {
+            'Strategy': strategy_name,
+            'Total Power (W)': results['total_power_consumption'],
+            'Average Power (W)': results['average_power_consumption'],
+            'Total Energy (Wh)': results['total_energy_consumption'],
+            'Active Hosts': results['active_hosts']
+        }
+
+        # Add execution time results if available
+        if exec_time_results and strategy_name in exec_time_results:
+            exec_results = exec_time_results[strategy_name]
+            strategy_data.update({
+                'Total Exec Time (s)': exec_results['total_execution_time'],
+                'Avg Exec Time (s)': exec_results['avg_execution_time'],
+                'Max Exec Time (s)': exec_results['max_execution_time'],
+                'Min Exec Time (s)': exec_results['min_execution_time'],
+                'Cloudlet Count': exec_results['cloudlet_count']
+            })
+
+        comparison_data.append(strategy_data)
+
+    comparison_df = pd.DataFrame(comparison_data)
+    comparison_df.to_csv('plots/complete_strategy_comparison.csv', index=False)
+
+    print("\nComplete Strategy Comparison:")
+    print(comparison_df.to_string(index=False))
+
 def main():
     print("Starting migration simulation analysis...")
 
@@ -143,57 +291,38 @@ def main():
 
     os.makedirs('plots', exist_ok=True)
 
+    exec_time_results = None
+    power_results = None
+
     if power_data:
         print("\nAnalyzing power consumption data...")
-        power_results = analyze_power_consumption(power_data)
+        power_results = plot_power_comparison(power_data)
 
         for strategy, results in power_results.items():
             strategy_name = strategy.replace('_power', '')
             print(f"\n{strategy_name} power statistics:")
             for metric, value in results.items():
                 print(f"  {metric}: {value:.2f}")
-
-        plot_power_comparison(power_data)
     else:
         print("No power consumption data found")
 
     if policy_data:
-        print("\nAnalyzing migration policy data...")
-        policy_results = analyze_migration_policies(policy_data)
+        print("\nAnalyzing execution time data...")
+        exec_time_results = plot_execution_time_comparison(policy_data)
 
-        for strategy, results in policy_results.items():
-            strategy_name = strategy.replace('_policy', '')
-            print(f"\n{strategy_name} policy statistics:")
+        # Add total execution time plot
+        plot_total_execution_time_comparison(policy_data)
+
+        for strategy, results in exec_time_results.items():
+            print(f"\n{strategy} execution time statistics:")
             for metric, value in results.items():
-                print(f"  {metric}: {value:.2f}")
-
-        plot_vm_distribution(policy_data)
+                print(f"  {metric}: {value:.4f}")
     else:
         print("No migration policy data found")
 
-    if power_data:
-        print("\nGenerating comparison table...")
-        generate_comparison_table(power_results)
-
-def generate_comparison_table(power_results):
-    """Generate a comparison table for all strategies"""
-    comparison_data = []
-
-    for strategy, results in power_results.items():
-        strategy_name = strategy.replace('_power', '')
-        comparison_data.append({
-            'Strategy': strategy_name,
-            'Total Power (W)': results['total_power_consumption'],
-            'Average Power (W)': results['average_power_consumption'],
-            'Total Energy (Wh)': results['total_energy_consumption'],
-            'Active Hosts': results['active_hosts']
-        })
-
-    comparison_df = pd.DataFrame(comparison_data)
-    comparison_df.to_csv('plots/strategy_comparison.csv', index=False)
-
-    print("\nStrategy Comparison:")
-    print(comparison_df.to_string(index=False))
+    if power_data and policy_data:
+        print("\nGenerating comprehensive comparison table...")
+        generate_comparison_table(power_results, exec_time_results)
 
 if __name__ == "__main__":
     main()
