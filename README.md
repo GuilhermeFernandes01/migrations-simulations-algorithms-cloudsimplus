@@ -17,6 +17,7 @@ This repository contains code for simulating VM migration algorithms, running ex
    - [Setup](#setup)
    - [Running the Analysis](#running-the-analysis)
 5. [Analysis Results](#analysis-results)
+   - [Generated Plots and Files](#generated-plots-and-files)
 6. [Energy Calculation Method](#energy-calculation-method)
 7. [Understanding the Results](#understanding-the-results)
 
@@ -27,7 +28,7 @@ This repository contains code for simulating VM migration algorithms, running ex
 This project simulates the following VM migration algorithms:
 
 - **Best Fit**
-- **Worst Fit**
+- **First Fit**
 
 ---
 
@@ -71,7 +72,7 @@ sh ./execute_migrations.sh
 Simulation results are saved in the `migrations_results` folder. Each migration algorithm generates a separate CSV file:
 
 - `migration_best_fit_policy.csv`
-- `migration_worst_fit_policy.csv`
+- `migration_first_fit_policy.csv`
 
 These files contain detailed data for each migration run.
 
@@ -122,6 +123,17 @@ The analysis produces the following outputs:
 2. **Visualization Graph**: Saved in the `plots` directory, comparing total energy consumption for each strategy.
 3. **Comparative CSV File**: A table summarizing all strategies.
 
+### Generated Plots and Files
+
+The analysis script generates the following items in the `plots` directory:
+
+1. **total_energy_comparison.png**
+2. **max_execution_time_comparison.png**
+3. **total_execution_time_comparison.png**
+4. **complete_strategy_comparison.csv**
+
+These visualizations and data files help evaluate VM migration strategies from multiple perspectives: energy efficiency, performance consistency, and overall execution time.
+
 ---
 
 ## Energy Calculation Method
@@ -137,3 +149,6 @@ Energy consumption is calculated as follows:
 ## Understanding the Results
 
 - **Energy Consumption**: Lower values indicate more energy-efficient strategies.
+- **Maximum Execution Time**: Lower values indicate more consistent performance and better QoS guarantees.
+- **Total Execution Time**: Lower values indicate better overall workload processing efficiency.
+- **Active Hosts**: Fewer active hosts typically correlate with better energy efficiency, but may impact performance.
